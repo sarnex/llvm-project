@@ -53,7 +53,7 @@ extern "C" {
 #if defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
 
 [[gnu::weak]] void *malloc(size_t Size) { return allocator::alloc(Size); }
-[[gnu::weak]] void free(void *Ptr) { allocator::free(Ptr); }
+[[gnu::weak]] void free(void *Ptr) {  }
 
 #else
 
@@ -137,9 +137,9 @@ void *SharedMemorySmartStackTy::push(uint64_t Bytes) {
     return Ptr;
   }
 
-  if (config::isDebugMode(DeviceDebugKind::CommonIssues))
-    printf("Shared memory stack full, fallback to dynamic allocation of global "
-           "memory will negatively impact performance.\n");
+  //if (config::isDebugMode(DeviceDebugKind::CommonIssues))
+    //    printf("Shared memory stack full, fallback to dynamic allocation of global "
+    //           "memory will negatively impact performance.\n");
   void *GlobalMemory = memory::allocGlobal(
       AlignedBytes, "Slow path shared memory allocation, insufficient "
                     "shared memory stack memory!");
@@ -172,12 +172,12 @@ void memory::freeShared(void *Ptr, uint64_t Bytes, const char *Reason) {
 
 void *memory::allocGlobal(uint64_t Bytes, const char *Reason) {
   void *Ptr = malloc(Bytes);
-  if (config::isDebugMode(DeviceDebugKind::CommonIssues) && Ptr == nullptr)
-    printf("nullptr returned by malloc!\n");
+  //  if (config::isDebugMode(DeviceDebugKind::CommonIssues) && Ptr == nullptr)
+    //    printf("nullptr returned by malloc!\n");
   return Ptr;
 }
 
-void memory::freeGlobal(void *Ptr, const char *Reason) { free(Ptr); }
+void memory::freeGlobal(void *Ptr, const char *Reason) { }
 
 ///}
 

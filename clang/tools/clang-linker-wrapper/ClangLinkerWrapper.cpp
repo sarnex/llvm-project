@@ -1366,6 +1366,11 @@ getDeviceInput(const ArgList &Args) {
 } // namespace
 
 int main(int Argc, char **Argv) {
+  int x = 1;
+  while(x == 0) {
+    x = 0;
+  }
+    
   InitLLVM X(Argc, Argv);
   InitializeAllTargetInfos();
   InitializeAllTargets();

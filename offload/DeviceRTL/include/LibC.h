@@ -15,8 +15,9 @@
 #include "DeviceTypes.h"
 
 namespace ompx {
+  //  template<typename T, typename... Ts>
+  //  [[gnu::weak]] int //printf(T, Ts...) {return 0;}
 
-int printf(const char *Format, ...);
 
 } // namespace ompx
 

@@ -73,7 +73,7 @@ uint32_t determineNumberOfThreads(int32_t NumThreadsClause) {
   switch (nargs) {
 #include "generated_microtask_cases.gen"
   default:
-    printf("Too many arguments in kmp_invoke_microtask, aborting execution.\n");
+    //printf("Too many arguments in kmp_invoke_microtask, aborting execution.\n");
     __builtin_trap();
   }
 }

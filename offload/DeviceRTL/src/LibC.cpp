@@ -9,9 +9,9 @@
 #include "LibC.h"
 
 #if defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
-extern "C" int vprintf(const char *format, __builtin_va_list) { return -1; }
+
 #else
-extern "C" int vprintf(const char *format, __builtin_va_list);
+
 #endif
 
 extern "C" {
@@ -32,17 +32,14 @@ extern "C" {
     dstc[I] = C;
 }
 
-[[gnu::weak]] int printf(const char *Format, ...) {
-  __builtin_va_list vlist;
-  __builtin_va_start(vlist, Format);
-  return ::vprintf(Format, vlist);
-}
+
 }
 
 namespace ompx {
-[[clang::no_builtin("printf")]] int printf(const char *Format, ...) {
-  __builtin_va_list vlist;
-  __builtin_va_start(vlist, Format);
-  return ::vprintf(Format, vlist);
-}
+  //int //printf(const char *Format, ...) {
+  //return 0;
+  //  __builtin_va_list vlist;
+  //  __builtin_va_start(vlist, Format);
+  //  return ::v//printf(Format, vlist);
+  //}
 } // namespace ompx

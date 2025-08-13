@@ -258,6 +258,69 @@ void unsetCriticalLock(omp_lock_t *Lock) { unsetLock(Lock); }
 void setCriticalLock(omp_lock_t *Lock) { setLock(Lock); }
 
 #endif
+
+  #ifdef __SPIRV__
+  uint32_t atomicInc(uint32_t *Address, uint32_t Val, atomic::OrderingTy Ordering,
+                   atomic::MemScopeTy MemScope) {
+    return 0;
+}
+
+void namedBarrierInit() {}
+
+void namedBarrier() {
+  uint32_t NumThreads = omp_get_num_threads();
+  ASSERT(NumThreads % 32 == 0, nullptr);
+
+  // The named barrier for active parallel threads of a team in an L1 parallel
+  // region to synchronize with each other.
+  constexpr int BarrierNo = 7;
+ 
+}
+
+void fenceTeam(atomic::OrderingTy) {  }
+
+void fenceKernel(atomic::OrderingTy) {  }
+
+void fenceSystem(atomic::OrderingTy) {  }
+
+void syncWarp(__kmpc_impl_lanemask_t Mask) {  }
+
+void syncThreads(atomic::OrderingTy Ordering) {
+  constexpr int BarrierNo = 8;
+  //__nvvm_barrier_sync(BarrierNo);
+}
+
+void syncThreadsAligned(atomic::OrderingTy Ordering) { }
+
+constexpr uint32_t OMP_SPIN = 1000;
+constexpr uint32_t UNSET = 0;
+constexpr uint32_t SET = 1;
+
+// TODO: This seems to hide a bug in the declare variant handling. If it is
+// called before it is defined
+//       here the overload won't happen. Investigate lalter!
+void unsetLock(omp_lock_t *Lock) {
+  (void)atomicExchange((uint32_t *)Lock, UNSET, atomic::seq_cst);
+}
+
+int testLock(omp_lock_t *Lock) {
+  return atomic::add((uint32_t *)Lock, 0u, atomic::seq_cst);
+}
+
+void initLock(omp_lock_t *Lock) { unsetLock(Lock); }
+
+void destroyLock(omp_lock_t *Lock) { unsetLock(Lock); }
+
+void setLock(omp_lock_t *Lock) {
+  // TODO: not sure spinning is a good idea here..
+ 
+}
+
+void unsetCriticalLock(omp_lock_t *Lock) { unsetLock(Lock); }
+
+void setCriticalLock(omp_lock_t *Lock) { setLock(Lock); }
+
+#endif
 ///}
 
 } // namespace impl

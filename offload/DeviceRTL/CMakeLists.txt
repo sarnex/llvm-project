@@ -90,6 +90,50 @@ set(bc_flags -c -flto -std=c++17 -fvisibility=hidden
 function(compileDeviceRTLLibrary target_name target_triple)
   set(target_bc_flags ${ARGN})
 
+  if("${target_name}" STREQUAL "spirv")
+    # Remove -flto from bc_flags for SPIR-V
+    set(spirv_bc_flags "-c" "-std=c++17" "-fvisibility=hidden"
+      ${clang_opt_flags} -nogpulib -nostdlibinc
+      -fno-rtti -fno-exceptions -fconvergent-functions
+      -Wno-unknown-cuda-version -emit-llvm
+      -mllvm --spirv-ext=+SPV_INTEL_function_pointers
+      -DOMPTARGET_DEVICE_RUNTIME
+      -I${include_directory}
+      -I${devicertl_base_directory}/../include
+      -I${devicertl_base_directory}/../../libc)
+    if(${LIBOMPTARGET_GPU_LIBC_SUPPORT})
+      list(APPEND spirv_bc_flags -DOMPTARGET_HAS_LIBC)
+    endif()
+    set(bc_outputs)
+    foreach(src ${src_files})
+      get_filename_component(src_name ${src} NAME_WE)
+      set(outfile "${src_name}-${target_name}.bc")
+      add_custom_command(OUTPUT ${outfile}
+        COMMAND ${CLANG_TOOL}
+        ${spirv_bc_flags}
+        --target=${target_triple}
+        ${target_bc_flags}
+        ${src}
+        -o ${outfile}
+        COMMENT "Building SPIR-V LLVM bitcode ${outfile}"
+        VERBATIM
+      )
+      list(APPEND bc_outputs ${outfile})
+    endforeach()
+    find_program(LLVM_LINK_TOOL NAMES llvm-link REQUIRED)
+    set(linked_bc "libomptarget-${target_name}.bc")
+    add_custom_command(OUTPUT ${linked_bc}
+      COMMAND ${LLVM_LINK_TOOL} -o ${linked_bc} ${bc_outputs}
+      DEPENDS ${bc_outputs}
+      COMMENT "Linking all SPIR-V bitcode files into ${linked_bc}"
+      VERBATIM
+    )
+    add_custom_target(libomptarget-${target_name} ALL DEPENDS ${linked_bc})
+    install(FILES ${linked_bc}
+            DESTINATION "lib${LLVM_LIBDIR_SUFFIX}/${target_triple}")
+    return()
+  endif()
+
   foreach(src ${src_files})
     get_filename_component(infile ${src} ABSOLUTE)
     get_filename_component(outfile ${src} NAME)
@@ -136,7 +180,7 @@ function(compileDeviceRTLLibrary target_name target_triple)
     "--target=${target_triple}" "-fuse-ld=lld" "-march=" "-mcpu="
     "-Wno-unused-command-line-argument")
   target_link_options(libomptarget-${target_name} PRIVATE "--target=${target_triple}"
-                      "-r" "-nostdlib" "-flto" "-Wl,--lto-emit-llvm"
+                       "-nostdlib" "-flto" "-Wl,--lto-emit-llvm"
                       "-fuse-ld=lld" "-march=" "-mcpu=")
   install(TARGETS libomptarget-${target_name}
           PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ
@@ -156,7 +200,7 @@ function(compileDeviceRTLLibrary target_name target_triple)
   )
   target_link_libraries(omptarget.${target_name} PRIVATE omptarget.${target_name}.all_objs)
   target_link_options(omptarget.${target_name} PRIVATE "--target=${target_triple}"
-                      "-Wno-unused-command-line-argument" "-r" "-nostdlib" "-flto"
+                      "-Wno-unused-command-line-argument" "-nostdlib" "-flto"
                        "-Wl,--lto-emit-llvm" "-fuse-ld=lld" "-march=" "-mcpu=")
 
   install(TARGETS omptarget.${target_name}
@@ -185,4 +229,8 @@ endif()
 
 if(NOT LLVM_TARGETS_TO_BUILD OR "NVPTX" IN_LIST LLVM_TARGETS_TO_BUILD)
   compileDeviceRTLLibrary(nvptx nvptx64-nvidia-cuda --cuda-feature=+ptx63)
+endif()
+
+if(NOT LLVM_TARGETS_TO_BUILD OR "SPIRV" IN_LIST LLVM_TARGETS_TO_BUILD)
+  compileDeviceRTLLibrary(spirv spirv64-unknown-unknown)
 endif()

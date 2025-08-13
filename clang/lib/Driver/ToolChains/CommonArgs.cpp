@@ -1395,7 +1395,7 @@ bool tools::addOpenMPRuntime(const Compilation &C, ArgStringList &CmdArgs,
     // We need libomptarget (liboffload) if it's the choosen offloading runtime.
     if (Args.hasFlag(options::OPT_foffload_via_llvm,
                      options::OPT_fno_offload_via_llvm, false))
-      CmdArgs.push_back("-lomptarget");
+      CmdArgs.push_back("/localdisk2/nsarnie/llvm_upstream_addrspace/build/lib/libomptarget.so.22.0git");
     return false;
   }
 
@@ -1429,7 +1429,7 @@ bool tools::addOpenMPRuntime(const Compilation &C, ArgStringList &CmdArgs,
       CmdArgs.push_back("-lrt");
 
   if (IsOffloadingHost)
-    CmdArgs.push_back("-lomptarget");
+    CmdArgs.push_back("/localdisk2/nsarnie/llvm_upstream_addrspace/build/lib/libomptarget.so.22.0git");
 
   addArchSpecificRPath(TC, Args, CmdArgs);
 

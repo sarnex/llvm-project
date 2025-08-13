@@ -34,10 +34,10 @@ void __assert_assume(bool condition) { __builtin_assume(condition); }
 void __assert_fail_internal(const char *expr, const char *msg, const char *file,
                             unsigned line, const char *function) {
   if (msg) {
-    printf("%s:%u: %s: Assertion %s (`%s`) failed.\n", file, line, function,
-           msg, expr);
+    //printf("%s:%u: %s: Assertion %s (`%s`) failed.\n", file, line, function,
+    //           msg, expr);
   } else {
-    printf("%s:%u: %s: Assertion `%s` failed.\n", file, line, function, expr);
+    //printf("%s:%u: %s: Assertion `%s` failed.\n", file, line, function, expr);
   }
   __builtin_trap();
 }
