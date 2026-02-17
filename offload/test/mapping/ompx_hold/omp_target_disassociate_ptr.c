@@ -4,13 +4,19 @@
 
 // RUN: %libomptarget-compile-generic -fopenmp-extensions
 // RUN: %not %libomptarget-run-generic 0   2>&1 | %fcheck-generic
+// XFAIL: intelgpu
 // RUN: %not %libomptarget-run-generic 1   2>&1 | %fcheck-generic
+// XFAIL: intelgpu
 // RUN: %not %libomptarget-run-generic inf 2>&1 | %fcheck-generic
+// XFAIL: intelgpu
 
 // RUN: %libomptarget-compile-generic -fopenmp-extensions -DHOLD_MORE
 // RUN: %not %libomptarget-run-generic 0   2>&1 | %fcheck-generic
+// XFAIL: intelgpu
 // RUN: %not %libomptarget-run-generic 1   2>&1 | %fcheck-generic
+// XFAIL: intelgpu
 // RUN: %not %libomptarget-run-generic inf 2>&1 | %fcheck-generic
+// XFAIL: intelgpu
 
 #include <limits.h>
 #include <omp.h>

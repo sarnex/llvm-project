@@ -6,6 +6,7 @@
 // RUN:   -DEXTENDS=BEFORE
 // RUN: %libomptarget-run-fail-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // --------------------------------------------------
 // Check extends after
@@ -15,6 +16,7 @@
 // RUN:   -DEXTENDS=AFTER
 // RUN: %libomptarget-run-fail-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // END.
 

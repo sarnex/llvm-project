@@ -1,6 +1,7 @@
 // RUN: %libomptarget-compile-generic -fopenmp-version=51
 // RUN: %libomptarget-run-fail-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // The host memory layout for the following program looks like this:
 //

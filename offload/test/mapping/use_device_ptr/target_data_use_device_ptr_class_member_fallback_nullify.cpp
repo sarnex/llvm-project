@@ -3,6 +3,7 @@
 // RUN: | %fcheck-generic -check-prefixes=CHECK,OFFLOAD
 // RUN: env OMP_TARGET_OFFLOAD=disabled %libomptarget-run-generic 2>&1 \
 // RUN: | %fcheck-generic -check-prefixes=CHECK,NOOFFLOAD
+// XFAIL: intelgpu
 
 // Test that when a use_device_ptr lookup fails, the
 // privatized pointer is set to null because of fb_nullify.

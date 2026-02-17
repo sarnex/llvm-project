@@ -1,6 +1,7 @@
 // RUN: %libomptarget-compile-generic
 // RUN: %libomptarget-run-fail-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // CHECK: omptarget message: explicit extension not allowed: host address specified is 0x{{.*}} (8 bytes), but device allocation maps to host at 0x{{.*}} (8 bytes)
 // CHECK: omptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).

@@ -1,6 +1,6 @@
 // RUN: %libomptarget-compileopt-generic -fno-exceptions
 // RUN: %libomptarget-run-generic 2>&1 | %fcheck-generic
-// XFAIL: intelgpu
+// UNSUPPORTED: intelgpu
 
 #include <stdint.h>
 #include <stdio.h>

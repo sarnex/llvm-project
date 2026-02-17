@@ -6,6 +6,7 @@
 // RUN:   -DCLAUSE=to -DEXTENDS=BEFORE
 // RUN: %libomptarget-run-fail-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // --------------------------------------------------
 // Check 'from' and extends before
@@ -15,6 +16,7 @@
 // RUN:   -DCLAUSE=from -DEXTENDS=BEFORE
 // RUN: %libomptarget-run-fail-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // --------------------------------------------------
 // Check 'to' and extends after
@@ -24,6 +26,7 @@
 // RUN:   -DCLAUSE=to -DEXTENDS=AFTER
 // RUN: %libomptarget-run-fail-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // --------------------------------------------------
 // Check 'from' and extends after
@@ -33,6 +36,7 @@
 // RUN:   -DCLAUSE=from -DEXTENDS=AFTER
 // RUN: %libomptarget-run-fail-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // END.
 

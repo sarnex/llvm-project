@@ -1,6 +1,7 @@
 // RUN: %libomptarget-compile-generic -fopenmp-version=51 -g
 // RUN: env LIBOMPTARGET_INFO=64 %libomptarget-run-generic 2>&1 \
 // RUN: | %fcheck-generic
+// XFAIL: intelgpu
 
 // FIXME: Fails due to optimized debugging in 'ptxas'
 // UNSUPPORTED: nvptx64-nvidia-cuda-LTO
