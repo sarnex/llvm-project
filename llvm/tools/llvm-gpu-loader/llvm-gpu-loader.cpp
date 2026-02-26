@@ -234,6 +234,9 @@ int main(int argc, const char **argv, const char **envp) {
     case ELF::EM_CUDA:
       Backend = OL_PLATFORM_BACKEND_CUDA;
       break;
+    case ELF::EM_INTELGT:
+      Backend = OL_PLATFORM_BACKEND_LEVEL_ZERO;
+      break;
     default:
       handleError(createStringError(
           "unhandled ELF architecture: %s",
