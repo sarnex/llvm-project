@@ -84,6 +84,9 @@ function(_get_hermetic_test_compile_options output_var)
     list(APPEND compile_options
          -Wno-multi-gpu --cuda-path=${LIBC_CUDA_ROOT}
          -nogpulib -march=${LIBC_GPU_TARGET_ARCHITECTURE} -fno-use-cxa-atexit)
+  elseif(LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
+    list(APPEND compile_options
+         -nogpulib)
   endif()
 
   set(${output_var} ${compile_options} PARENT_SCOPE)
@@ -547,12 +550,23 @@ function(add_integration_test test_name)
   list(REMOVE_DUPLICATES link_object_files)
 
   # Make a library of all deps
-  add_library(
+  if(LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
+    add_library(
     ${fq_target_name}.__libc__
-    STATIC
+    OBJECT
     EXCLUDE_FROM_ALL
     ${link_object_files}
-  )
+    )
+    target_link_options(${fq_target_name}.__libc__ PRIVATE
+                  "-nostdlib" "-emit-llvm")
+  else()
+    add_library(
+      ${fq_target_name}.__libc__
+      STATIC
+      EXCLUDE_FROM_ALL
+      ${link_object_files}
+    )
+  endif()
   set_target_properties(${fq_target_name}.__libc__
       PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
   set_target_properties(${fq_target_name}.__libc__
@@ -588,6 +602,10 @@ function(add_integration_test test_name)
       "-Wl,-mllvm,-nvptx-emit-init-fini-kernel"
       -march=${LIBC_GPU_TARGET_ARCHITECTURE} -nostdlib -static
       "--cuda-path=${LIBC_CUDA_ROOT}")
+  elseif(LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
+    target_link_options(${fq_build_target_name} PRIVATE
+      ${LIBC_COMPILE_OPTIONS_DEFAULT} ${INTEGRATION_TEST_COMPILE_OPTIONS}
+      -nostdlib -emit-llvm)
   elseif(LIBC_CC_SUPPORTS_NOSTDLIBPP)
     set(link_options
       -nolibc
@@ -737,12 +755,23 @@ function(add_libc_hermetic test_name)
   list(REMOVE_DUPLICATES link_object_files)
 
   # Make a library of all deps
-  add_library(
-    ${fq_target_name}.__libc__
-    STATIC
-    EXCLUDE_FROM_ALL
-    ${link_object_files}
-  )
+  if(LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
+    add_library(
+      ${fq_target_name}.__libc__
+      OBJECT
+      EXCLUDE_FROM_ALL
+      ${link_object_files}
+      )
+    target_link_options(${fq_target_name}.__libc__ PRIVATE
+                  "-nostdlib" "-emit-llvm")
+  else()
+    add_library(
+      ${fq_target_name}.__libc__
+      STATIC
+      EXCLUDE_FROM_ALL
+      ${link_object_files}
+    )
+  endif()
   set_target_properties(${fq_target_name}.__libc__
       PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
   set_target_properties(${fq_target_name}.__libc__
@@ -799,6 +828,10 @@ function(add_libc_hermetic test_name)
       "-Wl,-mllvm,-nvptx-emit-init-fini-kernel"
       -march=${LIBC_GPU_TARGET_ARCHITECTURE} -nostdlib -static
       "--cuda-path=${LIBC_CUDA_ROOT}")
+  elseif(LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
+    target_link_options(${fq_build_target_name} PRIVATE
+      ${LIBC_COMPILE_OPTIONS_DEFAULT}
+      -nostdlib -emit-llvm)
   elseif(LIBC_CC_SUPPORTS_NOSTDLIBPP)
     set(link_options
       -nolibc

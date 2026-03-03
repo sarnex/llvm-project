@@ -15,6 +15,7 @@
 #include "llvm-gpu-loader.h"
 
 #include "llvm/BinaryFormat/Magic.h"
+#include "llvm/Frontend/Offloading/Utility.h"
 #include "llvm/Object/ELF.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Support/CommandLine.h"
@@ -143,7 +144,7 @@ void *copyEnvironment(const char **Envp, ol_device_handle_t Device) {
 }
 
 ol_device_handle_t findDevice(MemoryBufferRef Binary) {
-  ol_device_handle_t Device;
+  ol_device_handle_t Device = nullptr;
   std::tuple Data = std::make_tuple(&Device, &Binary);
   OFFLOAD_ERR(olIterateDevices(
       [](ol_device_handle_t Device, void *UserData) {
@@ -201,7 +202,8 @@ int main(int argc, const char **argv, const char **envp) {
   cl::ParseCommandLineOptions(
       argc, argv,
       "A utility used to launch unit tests built for a GPU target. This is\n"
-      "intended to provide an intrface simular to cross-compiling emulators\n");
+      "intended to provide an interface simular to cross-compiling "
+      "emulators\n");
 
   if (Help) {
     cl::PrintHelpMessage();
@@ -215,7 +217,8 @@ int main(int argc, const char **argv, const char **envp) {
       MemoryBuffer::getFileOrSTDIN(File);
   if (std::error_code EC = ImageOrErr.getError())
     handleError(errorCodeToError(EC));
-  MemoryBufferRef Image = **ImageOrErr;
+  std::unique_ptr<MemoryBuffer> ImageBuffer = std::move(*ImageOrErr);
+  MemoryBufferRef Image = *ImageBuffer;
 
   ol_platform_backend_t Backend;
   ol_init_args_t InitArgs = OL_INIT_ARGS_INIT;
@@ -243,16 +246,29 @@ int main(int argc, const char **argv, const char **envp) {
           ELF::convertEMachineToArchName(ElfOrErr->getHeader().e_machine)
               .data()));
     }
-    InitArgs.NumPlatforms = 1;
-    InitArgs.Platforms = &Backend;
+  } else if (Magic == file_magic::spirv_object) {
+    Backend = OL_PLATFORM_BACKEND_LEVEL_ZERO;
+    if (auto Err =
+            offloading::intel::containerizeOpenMPSPIRVImage(ImageBuffer))
+      handleError(std::move(Err));
+    Image = ImageBuffer->getMemBufferRef();
+  } else {
+    handleError(createStringError("unrecognized file type"));
   }
+  InitArgs.NumPlatforms = 1;
+  InitArgs.Platforms = &Backend;
+
 
   SmallVector<const char *> NewArgv = {File.c_str()};
   llvm::transform(Args, std::back_inserter(NewArgv),
                   [](const std::string &Arg) { return Arg.c_str(); });
 
   OFFLOAD_ERR(olInit(&InitArgs));
+  if (InitArgs.NumPlatforms == 0)
+    handleError(createStringError("No compatible platforms were found"));
   ol_device_handle_t Device = findDevice(Image);
+  if (!Device)
+    handleError(createStringError("No compatible device was found"));
   ol_device_handle_t Host = getHostDevice();
 
   ol_program_handle_t Program;
