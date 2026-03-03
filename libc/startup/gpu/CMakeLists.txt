@@ -36,7 +36,9 @@ function(add_startup_object name)
     if (LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
       target_link_options(${fq_target_name}.exe PRIVATE
                           ${LIBC_COMPILE_OPTIONS_DEFAULT}
-                          "-nostdlib" "-emit-llvm")
+                          "-nostdlib" 
+                          "SHELL:-Xlinker --allow-partial-linkage"
+                          "SHELL:-Xlinker --create-library")
     else()
       target_link_options(${fq_target_name}.exe PRIVATE
                           ${LIBC_COMPILE_OPTIONS_DEFAULT}
