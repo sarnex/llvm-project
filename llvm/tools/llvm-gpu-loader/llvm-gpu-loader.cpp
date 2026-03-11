@@ -144,7 +144,7 @@ void *copyEnvironment(const char **Envp, ol_device_handle_t Device) {
 }
 
 ol_device_handle_t findDevice(MemoryBufferRef Binary) {
-  ol_device_handle_t Device = nullptr;
+  ol_device_handle_t Device;
   std::tuple Data = std::make_tuple(&Device, &Binary);
   OFFLOAD_ERR(olIterateDevices(
       [](ol_device_handle_t Device, void *UserData) {
@@ -217,8 +217,7 @@ int main(int argc, const char **argv, const char **envp) {
       MemoryBuffer::getFileOrSTDIN(File);
   if (std::error_code EC = ImageOrErr.getError())
     handleError(errorCodeToError(EC));
-  std::unique_ptr<MemoryBuffer> ImageBuffer = std::move(*ImageOrErr);
-  MemoryBufferRef Image = *ImageBuffer;
+  MemoryBufferRef Image = **ImageOrErr;
 
   ol_platform_backend_t Backend;
   ol_init_args_t InitArgs = OL_INIT_ARGS_INIT;
@@ -246,18 +245,9 @@ int main(int argc, const char **argv, const char **envp) {
           ELF::convertEMachineToArchName(ElfOrErr->getHeader().e_machine)
               .data()));
     }
-  } else if (Magic == file_magic::spirv_object) {
-    Backend = OL_PLATFORM_BACKEND_LEVEL_ZERO;
-    if (auto Err =
-            offloading::intel::containerizeOpenMPSPIRVImage(ImageBuffer))
-      handleError(std::move(Err));
-    Image = ImageBuffer->getMemBufferRef();
-  } else {
-    handleError(createStringError("unrecognized file type"));
-  }
+   }
   InitArgs.NumPlatforms = 1;
   InitArgs.Platforms = &Backend;
-
 
   SmallVector<const char *> NewArgv = {File.c_str()};
   llvm::transform(Args, std::back_inserter(NewArgv),
