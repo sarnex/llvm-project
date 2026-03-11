@@ -202,7 +202,7 @@ int main(int argc, const char **argv, const char **envp) {
   cl::ParseCommandLineOptions(
       argc, argv,
       "A utility used to launch unit tests built for a GPU target. This is\n"
-      "intended to provide an interface simular to cross-compiling "
+      "intended to provide an interface similar to cross-compiling "
       "emulators\n");
 
   if (Help) {
@@ -270,6 +270,7 @@ int main(int argc, const char **argv, const char **envp) {
   if (!Device)
     handleError(createStringError("No compatible device was found"));
   ol_device_handle_t Host = getHostDevice();
+  assert(Host && "Host device should always be present");
 
   ol_program_handle_t Program;
   OFFLOAD_ERR(olCreateProgram(Device, Image.getBufferStart(),
