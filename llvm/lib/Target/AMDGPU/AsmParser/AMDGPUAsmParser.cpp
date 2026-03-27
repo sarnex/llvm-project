@@ -3967,9 +3967,10 @@ AMDGPUAsmParser::checkVOPDRegBankConstraints(const MCInst &Inst, bool AsVOPD3) {
                : MCRegister();
   };
 
-  // On GFX12+ if both OpX and OpY are V_MOV_B32 then OPY uses SRC2
+  // On GFX1170+ if both OpX and OpY are V_MOV_B32 then OPY uses SRC2
   // source-cache.
   bool SkipSrc =
+      Opcode == AMDGPU::V_DUAL_MOV_B32_e32_X_MOV_B32_e32_gfx1170 ||
       Opcode == AMDGPU::V_DUAL_MOV_B32_e32_X_MOV_B32_e32_gfx12 ||
       Opcode == AMDGPU::V_DUAL_MOV_B32_e32_X_MOV_B32_e32_gfx1250 ||
       Opcode == AMDGPU::V_DUAL_MOV_B32_e32_X_MOV_B32_e32_gfx13 ||
@@ -5035,6 +5036,12 @@ bool AMDGPUAsmParser::validateNeg(const MCInst &Inst, AMDGPU::OpName OpName) {
         return false;
     }
   }
+
+  // neg_lo[0:1] and neg_hi[0:1] are reserved and shall not used on gfx1250.
+  // in the _iu8 case neg bits are repurposed for signed/unsigned.
+  if (isGFX1250() && (TSFlags & SIInstrFlags::IsWMMA) && (Neg & 3) &&
+      Inst.getOpcode() != AMDGPU::V_WMMA_I32_16X16X64_IU8_w32_twoaddr_gfx1250)
+    return false;
 
   return true;
 }

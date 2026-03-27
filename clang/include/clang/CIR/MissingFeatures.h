@@ -81,7 +81,6 @@ struct MissingFeatures {
   static bool opFuncMultipleReturnVals() { return false; }
   static bool opFuncNakedAttr() { return false; }
   static bool opFuncNoDuplicateAttr() { return false; }
-  static bool opFuncNoUnwind() { return false; }
   static bool opFuncOpenCLKernelMetadata() { return false; }
   static bool opFuncOperandBundles() { return false; }
   static bool opFuncOptNoneAttr() { return false; }
@@ -218,7 +217,6 @@ struct MissingFeatures {
   static bool asmVectorType() { return false; }
   static bool assignMemcpyizer() { return false; }
   static bool astVarDeclInterface() { return false; }
-  static bool attributeBuiltin() { return false; }
   static bool attributeNoBuiltin() { return false; }
   static bool bitfields() { return false; }
   static bool builtinCall() { return false; }
@@ -329,7 +327,6 @@ struct MissingFeatures {
   static bool setDLLStorageClass() { return false; }
   static bool setNonGC() { return false; }
   static bool setObjCGCLValueClass() { return false; }
-  static bool setTargetAttributes() { return false; }
   static bool shouldSplitConstantStore() { return false; }
   static bool shouldUseBZeroPlusStoresToInitialize() { return false; }
   static bool shouldUseMemSetToInitialize() { return false; }
