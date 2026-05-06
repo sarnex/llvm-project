@@ -94,7 +94,7 @@ function(_get_hermetic_test_compile_options output_var)
          -nogpulib -march=${LIBC_GPU_TARGET_ARCHITECTURE} -fno-use-cxa-atexit)
   elseif(LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
     list(APPEND compile_options
-         -nogpulib)
+         -nogpulib -flto)
   endif()
 
   set(${output_var} ${compile_options} PARENT_SCOPE)

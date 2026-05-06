@@ -26,15 +26,18 @@ extern "C" [[gnu::visibility("protected"), clang::device_kernel]]
 void _begin(int, char **, char **env) {
   // The LLVM offloading runtime will automatically call any present global
   // constructors and destructors so we defer that handling.
-  __atomic_store_n(&LIBC_NAMESPACE::app.env_ptr,
-                   reinterpret_cast<uintptr_t *>(env), __ATOMIC_RELAXED);
+//  __atomic_store_n(&LIBC_NAMESPACE::app.env_ptr,
+//                   reinterpret_cast<uintptr_t *>(env), __ATOMIC_RELAXED);
+LIBC_NAMESPACE::app.env_ptr = reinterpret_cast<uintptr_t *>(env);
+
 }
 
 extern "C" [[gnu::visibility("protected"), clang::device_kernel]] void
 _start(int argc, char **argv, char **envp, int *ret) {
   // Invoke the 'main' function with every active thread that the user launched
   // the _start kernel with.
-  __atomic_fetch_or(ret, main(argc, argv, envp), __ATOMIC_RELAXED);
+//  __atomic_fetch_or(ret, main(argc, argv, envp), __ATOMIC_RELAXED);
+ *ret = main(argc, argv, envp) | *ret;
 }
 
 extern "C" [[gnu::visibility("protected"), clang::device_kernel]]
