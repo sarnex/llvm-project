@@ -85,8 +85,31 @@ Error L0ProgramBuilderTy::addModule(size_t Size, const uint8_t *Image,
   ModuleDesc.pConstants = &SpecConstants;
   Error CreateErrors = Error::success();
   auto handleError = [&](Error Err) {
-    if (BuildLog)
+    if (BuildLog) {
+
+    size_t LogSize = 0;
+    zeModuleBuildLogGetString( BuildLog, &LogSize, nullptr);
+    if (LogSize > 1) {
+      std::vector<char> LogString(LogSize);
+      zeModuleBuildLogGetString(BuildLog, &LogSize,
+                       LogString.data());
+      std::stringstream Str(LogString.data());
+      std::string Line;
+      int NumLines = 0;
+      while (std::getline(Str, Line, '\n')) {
+        MESSAGE("  '%s'", Line.c_str());
+      }
+    } else {
+      MESSAGE0("  <empty>");
+    }
+
+
+
+
+
+
       zeModuleBuildLogDestroy(BuildLog);
+    }
     CreateErrors = joinErrors(std::move(CreateErrors), std::move(Err));
   };
   CALL_ZE_HANDLE_ERROR(handleError, zeModuleCreate, l0Device.getZeContext(),

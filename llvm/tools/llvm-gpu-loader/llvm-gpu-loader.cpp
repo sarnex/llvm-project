@@ -144,7 +144,7 @@ void *copyEnvironment(const char **Envp, ol_device_handle_t Device) {
 }
 
 ol_device_handle_t findDevice(MemoryBufferRef Binary) {
-  ol_device_handle_t Device;
+  ol_device_handle_t Device = nullptr;
   std::tuple Data = std::make_tuple(&Device, &Binary);
   OFFLOAD_ERR(olIterateDevices(
       [](ol_device_handle_t Device, void *UserData) {
@@ -219,7 +219,7 @@ int main(int argc, const char **argv, const char **envp) {
     handleError(errorCodeToError(EC));
   MemoryBufferRef Image = **ImageOrErr;
 
-  ol_platform_backend_t Backend;
+  ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;
   ol_init_args_t InitArgs = OL_INIT_ARGS_INIT;
 
   file_magic Magic = identify_magic(Image.getBuffer());
@@ -245,9 +245,16 @@ int main(int argc, const char **argv, const char **envp) {
           ELF::convertEMachineToArchName(ElfOrErr->getHeader().e_machine)
               .data()));
     }
+   } else if (Magic == file_magic::spirv_object) {
+    // SPIR-V objects are assumed to be for Level Zero for now as that is the
+    // only platform that currently supports them.
+    Backend = OL_PLATFORM_BACKEND_LEVEL_ZERO;
    }
-  InitArgs.NumPlatforms = 1;
-  InitArgs.Platforms = &Backend;
+
+  if (Backend != OL_PLATFORM_BACKEND_UNKNOWN) {
+    InitArgs.Platforms = &Backend;
+    InitArgs.NumPlatforms = 1;
+  }
 
   SmallVector<const char *> NewArgv = {File.c_str()};
   llvm::transform(Args, std::back_inserter(NewArgv),
