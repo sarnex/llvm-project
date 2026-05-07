@@ -656,7 +656,7 @@ void *reallocate(void *ptr, uint64_t size) {
 }
 
 void *aligned_allocate(uint32_t alignment, uint64_t size) {
-return nullptr;
+
   // All alignment values must be a non-zero power of two.
   if (!impl::is_pow2(alignment))
     return nullptr;

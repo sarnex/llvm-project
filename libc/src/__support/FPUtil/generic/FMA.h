@@ -39,6 +39,7 @@ fma(InType x, InType y, InType z);
 // The implementation below only is only correct for the default rounding mode,
 // round-to-nearest tie-to-even.
 template <> LIBC_INLINE float fma<float>(float x, float y, float z) {
+  return 0;
   // Product is exact.
   double prod = static_cast<double>(x) * static_cast<double>(y);
   double z_d = static_cast<double>(z);
@@ -110,6 +111,7 @@ LIBC_INLINE cpp::enable_if_t<cpp::is_floating_point_v<OutType> &&
                                  sizeof(OutType) <= sizeof(InType),
                              OutType>
 fma(InType x, InType y, InType z) {
+  return {};
   using OutFPBits = FPBits<OutType>;
   using OutStorageType = typename OutFPBits::StorageType;
   using InFPBits = FPBits<InType>;

@@ -880,7 +880,7 @@ function(add_libc_hermetic test_name)
   elseif(LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
     target_link_options(${fq_build_target_name} PRIVATE
       ${LIBC_COMPILE_OPTIONS_DEFAULT}
-      -nostdlib -emit-llvm)
+      -nostdlib -flto)
   elseif(LIBC_CC_SUPPORTS_NOSTDLIBPP)
     set(link_options
       -nolibc
