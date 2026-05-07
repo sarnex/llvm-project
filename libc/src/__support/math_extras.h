@@ -61,23 +61,23 @@ mask_leading_zeros() {
 // Returns whether 'a + b' overflows, the result is stored in 'res'.
 template <typename T>
 [[nodiscard]] LIBC_INLINE constexpr bool add_overflow(T a, T b, T &res) {
-#if __has_builtin(__builtin_add_overflow)
-  return __builtin_add_overflow(a, b, &res);
-#else
+  //#if __has_builtin(__builtin_add_overflow)
+//  return __builtin_add_overflow(a, b, &res);
+//#else
   res = a + b;
   return (res < a) || (res < b);
-#endif // __builtin_add_overflow
+  //#endif // __builtin_add_overflow
 }
 
 // Returns whether 'a - b' overflows, the result is stored in 'res'.
 template <typename T>
 [[nodiscard]] LIBC_INLINE constexpr bool sub_overflow(T a, T b, T &res) {
-#if __has_builtin(__builtin_sub_overflow)
-  return __builtin_sub_overflow(a, b, &res);
-#else
+  //#if __has_builtin(__builtin_sub_overflow)
+  // return __builtin_sub_overflow(a, b, &res);
+  //#else
   res = a - b;
   return (res > a);
-#endif // __builtin_sub_overflow
+  //#endif // __builtin_sub_overflow
 }
 
 template <typename T>
@@ -105,19 +105,19 @@ template <typename T>
 template <typename T>
 [[nodiscard]] LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_unsigned_v<T>, T>
 add_with_carry(T a, T b, T carry_in, T &carry_out) {
-  if (!cpp::is_constant_evaluated()) {
-#if __has_builtin(__builtin_addcb)
-    RETURN_IF(unsigned char, __builtin_addcb)
-#elif __has_builtin(__builtin_addcs)
-    RETURN_IF(unsigned short, __builtin_addcs)
-#elif __has_builtin(__builtin_addc)
-    RETURN_IF(unsigned int, __builtin_addc)
-#elif __has_builtin(__builtin_addcl)
-    RETURN_IF(unsigned long, __builtin_addcl)
-#elif __has_builtin(__builtin_addcll)
-    RETURN_IF(unsigned long long, __builtin_addcll)
-#endif
-  }
+ //  if (!cpp::is_constant_evaluated()) {
+// #if __has_builtin(__builtin_addcb)
+//     RETURN_IF(unsigned char, __builtin_addcb)
+// #elif __has_builtin(__builtin_addcs)
+//     RETURN_IF(unsigned short, __builtin_addcs)
+// #elif __has_builtin(__builtin_addc)
+//     RETURN_IF(unsigned int, __builtin_addc)
+// #elif __has_builtin(__builtin_addcl)
+//     RETURN_IF(unsigned long, __builtin_addcl)
+// #elif __has_builtin(__builtin_addcll)
+//     RETURN_IF(unsigned long long, __builtin_addcll)
+// #endif
+//   }
   T sum = {};
   T carry1 = add_overflow(a, b, sum);
   T carry2 = add_overflow(sum, carry_in, sum);
@@ -131,19 +131,19 @@ add_with_carry(T a, T b, T carry_in, T &carry_out) {
 template <typename T>
 [[nodiscard]] LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_unsigned_v<T>, T>
 sub_with_borrow(T a, T b, T carry_in, T &carry_out) {
-  if (!cpp::is_constant_evaluated()) {
-#if __has_builtin(__builtin_subcb)
-    RETURN_IF(unsigned char, __builtin_subcb)
-#elif __has_builtin(__builtin_subcs)
-    RETURN_IF(unsigned short, __builtin_subcs)
-#elif __has_builtin(__builtin_subc)
-    RETURN_IF(unsigned int, __builtin_subc)
-#elif __has_builtin(__builtin_subcl)
-    RETURN_IF(unsigned long, __builtin_subcl)
-#elif __has_builtin(__builtin_subcll)
-    RETURN_IF(unsigned long long, __builtin_subcll)
-#endif
-  }
+//   if (!cpp::is_constant_evaluated()) {
+// #if __has_builtin(__builtin_subcb)
+//     RETURN_IF(unsigned char, __builtin_subcb)
+// #elif __has_builtin(__builtin_subcs)
+//     RETURN_IF(unsigned short, __builtin_subcs)
+// #elif __has_builtin(__builtin_subc)
+//     RETURN_IF(unsigned int, __builtin_subc)
+// #elif __has_builtin(__builtin_subcl)
+//     RETURN_IF(unsigned long, __builtin_subcl)
+// #elif __has_builtin(__builtin_subcll)
+//     RETURN_IF(unsigned long long, __builtin_subcll)
+// #endif
+//   }
   T sub = {};
   T carry1 = sub_overflow(a, b, sub);
   T carry2 = sub_overflow(sub, carry_in, sub);

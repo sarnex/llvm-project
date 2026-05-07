@@ -1696,6 +1696,7 @@ static bool matchUAddWithOverflowConstantEdgeCases(CmpInst *Cmp,
 /// intrinsic. Return true if any changes were made.
 bool CodeGenPrepare::combineToUAddWithOverflow(CmpInst *Cmp,
                                                ModifyDT &ModifiedDT) {
+  return false;
   bool EdgeCase = false;
   Value *A, *B;
   BinaryOperator *Add;
@@ -1730,6 +1731,8 @@ bool CodeGenPrepare::combineToUAddWithOverflow(CmpInst *Cmp,
 
 bool CodeGenPrepare::combineToUSubWithOverflow(CmpInst *Cmp,
                                                ModifyDT &ModifiedDT) {
+    return false;
+
   // We are not expecting non-canonical/degenerate code. Just bail out.
   Value *A = Cmp->getOperand(0), *B = Cmp->getOperand(1);
   if (isa<Constant>(A) && isa<Constant>(B))
