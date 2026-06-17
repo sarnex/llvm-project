@@ -318,6 +318,8 @@ class SPIRVEmitIntrinsics
   void replaceAllUsesWithAndErase(IRBuilder<> &B, Instruction *Src,
                                   Instruction *Dest, bool DeleteOld = true);
 
+  CallInst *replaceAggrOverflowIntrinsic(IntrinsicInst *II, Type *AggrTy);
+
   void applyDemangledPtrArgTypes(IRBuilder<> &B);
 
   GetElementPtrInst *simplifyZeroLengthArrayGepInst(GetElementPtrInst *GEP);
@@ -458,6 +460,30 @@ static bool isSpvAggrPlaceholder(const Value *V) {
       m_AnyIntrinsic<Intrinsic::spv_undef, Intrinsic::spv_const_composite>());
 }
 
+// Arithmetic-with-overflow intrinsics return a {scalar, i1} aggregate. When
+// such a result is destructured by extractvalue right away the existing
+// multi-def lowering handles it, but when it is used as a whole aggregate
+// value (e.g. an arm of an aggregate PHI) it has to be represented as an i32
+// value-id like any other aggregate SSA value. Returns true and reports the
+// aggregate type if I is such an intrinsic call.
+static bool isAggrOverflowIntrinsic(const Value *V, Type *&AggrTy) {
+  const auto *II = dyn_cast<IntrinsicInst>(V);
+  if (!II || !II->getType()->isAggregateType())
+    return false;
+  switch (II->getIntrinsicID()) {
+  case Intrinsic::uadd_with_overflow:
+  case Intrinsic::usub_with_overflow:
+  case Intrinsic::sadd_with_overflow:
+  case Intrinsic::ssub_with_overflow:
+  case Intrinsic::umul_with_overflow:
+  case Intrinsic::smul_with_overflow:
+    AggrTy = II->getType();
+    return true;
+  default:
+    return false;
+  }
+}
+
 static void setInsertPointSkippingPhis(IRBuilder<> &B, Instruction *I) {
   if (isa<PHINode>(I))
     B.SetInsertPoint(I->getParent()->getFirstNonPHIOrDbgOrAlloca());
@@ -539,6 +565,37 @@ void SPIRVEmitIntrinsics::replaceAllUsesWithAndErase(IRBuilder<> &B,
     if (Named.insert(Dest).second)
       emitAssignName(Dest, B);
   }
+}
+
+// Replace an arithmetic-with-overflow intrinsic call whose aggregate result is
+// used as a whole value with the target-specific spv_aggregate_with_overflow
+// intrinsic.
+// The new call returns an i32 value-id (so it can take part in the value-id
+// representation of aggregate SSA values, e.g. as a PHI arm), while the
+// original LLVM intrinsic id and arithmetic operands are preserved as call
+// arguments so the instruction selector can re-emit the proper SPIR-V op. The
+// real aggregate type is recorded in AggrConstTypes for type assignment.
+CallInst *SPIRVEmitIntrinsics::replaceAggrOverflowIntrinsic(IntrinsicInst *II,
+                                                            Type *AggrTy) {
+  IRBuilder<> B(II);
+  SmallVector<Value *, 4> Args;
+  Args.push_back(B.getInt32(II->getIntrinsicID()));
+  for (Value *Op : II->args())
+    Args.push_back(Op);
+  CallInst *NewI = cast<CallInst>(
+      B.CreateIntrinsic(Intrinsic::spv_aggregate_with_overflow, {}, Args));
+  AggrConstTypes[NewI] = AggrTy;
+  // The new call is an i32 value-id while the original returned the aggregate,
+  // so a type-checked replaceAllUsesWith() cannot be used. Rewrite the uses
+  // directly; whole-aggregate users (PHIs/selects/returns) have already been
+  // mutated to the value-id type, and extractvalue users are lowered against
+  // the value-id by visitExtractValueInst().
+  while (!II->use_empty()) {
+    Use &U = *II->use_begin();
+    U.set(NewI);
+  }
+  II->eraseFromParent();
+  return NewI;
 }
 
 static bool IsKernelArgInt8(Function *F, StoreInst *SI) {
@@ -2809,7 +2866,9 @@ void SPIRVEmitIntrinsics::insertAssignTypeIntrs(Instruction *I,
         if (It == AggrConstTypes.end())
           report_fatal_error("Unknown composite intrinsic type");
         TypeToAssign = It->second;
-      } else if (II->getIntrinsicID() == Intrinsic::spv_poison) {
+      } else if (II->getIntrinsicID() == Intrinsic::spv_poison ||
+                 II->getIntrinsicID() ==
+                     Intrinsic::spv_aggregate_with_overflow) {
         if (auto It = AggrConstTypes.find(II); It != AggrConstTypes.end())
           TypeToAssign = It->second;
       }
@@ -3617,6 +3676,22 @@ bool SPIRVEmitIntrinsics::runOnFunction(Function &Func) {
       continue;
     AggrConstTypes[&I] = I.getType();
     I.mutateType(I32Ty);
+  }
+
+  // An arithmetic-with-overflow intrinsic result only becomes a value-id when
+  // destructured by extractvalue, which the existing multi-def lowering handles
+  // directly. When it is instead used as a whole aggregate value (e.g. an arm
+  // of an aggregate PHI, a select, or a return), replace the intrinsic call
+  // with a value-id-producing spv_aggregate_with_overflow stand-in up front.
+  // Any extractvalue users are then lowered against that value-id by
+  // visitExtractValueInst().
+  for (Instruction &I : make_early_inc_range(instructions(Func))) {
+    Type *AggrTy = nullptr;
+    auto *II = dyn_cast<IntrinsicInst>(&I);
+    if (!II || !isAggrOverflowIntrinsic(II, AggrTy))
+      continue;
+    if (any_of(II->users(), [](User *U) { return !isa<ExtractValueInst>(U); }))
+      replaceAggrOverflowIntrinsic(II, AggrTy);
   }
 
   preprocessBoolVectorBitcasts(Func);

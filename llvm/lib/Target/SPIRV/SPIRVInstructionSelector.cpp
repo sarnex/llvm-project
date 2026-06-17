@@ -236,7 +236,21 @@ private:
                       MachineInstr &I) const;
 
   bool selectOverflowArith(Register ResVReg, SPIRVTypeInst ResType,
-                           MachineInstr &I, unsigned Opcode) const;
+                           MachineInstr &I, unsigned OrigIID) const;
+  bool selectAggregateWithOverflow(Register ResVReg, SPIRVTypeInst ResType,
+                                   MachineInstr &I) const;
+  // Emits the SPIR-V arithmetic implementing the arithmetic-with-overflow
+  // intrinsic OrigIID over the operands of I (which start at operand FirstOp),
+  // producing a {scalar, i1} result whose scalar element type is ResElemTy.
+  // The arithmetic-result register is returned in LowVReg and the i1
+  // overflow-flag register in OverflowVReg; pass them in as valid registers to
+  // have the results written there directly (the multi-def lowering), or as
+  // invalid registers to get fresh ones. ResName, if non-empty, names the
+  // intermediate composite result. The caller decides how to deliver the pair
+  // (multiple defs or a single composite value-id).
+  bool emitOverflowArith(MachineInstr &I, unsigned OrigIID, unsigned FirstOp,
+                         Type *ResElemTy, StringRef ResName, Register &LowVReg,
+                         Register &OverflowVReg) const;
   bool selectDebugTrap(Register ResVReg, SPIRVTypeInst ResType,
                        MachineInstr &I) const;
 
@@ -1239,18 +1253,16 @@ bool SPIRVInstructionSelector::spvSelect(Register ResVReg,
 
   case TargetOpcode::G_UADDO:
     return selectOverflowArith(ResVReg, ResType, I,
-                               ResType->getOpcode() == SPIRV::OpTypeVector
-                                   ? SPIRV::OpIAddCarryV
-                                   : SPIRV::OpIAddCarryS);
+                               Intrinsic::uadd_with_overflow);
   case TargetOpcode::G_USUBO:
     return selectOverflowArith(ResVReg, ResType, I,
-                               ResType->getOpcode() == SPIRV::OpTypeVector
-                                   ? SPIRV::OpISubBorrowV
-                                   : SPIRV::OpISubBorrowS);
+                               Intrinsic::usub_with_overflow);
   case TargetOpcode::G_UMULO:
-    return selectOverflowArith(ResVReg, ResType, I, SPIRV::OpUMulExtended);
+    return selectOverflowArith(ResVReg, ResType, I,
+                               Intrinsic::umul_with_overflow);
   case TargetOpcode::G_SMULO:
-    return selectOverflowArith(ResVReg, ResType, I, SPIRV::OpSMulExtended);
+    return selectOverflowArith(ResVReg, ResType, I,
+                               Intrinsic::smul_with_overflow);
 
   case TargetOpcode::G_SEXT:
     return selectExt(ResVReg, ResType, I, true);
@@ -2550,7 +2562,7 @@ bool SPIRVInstructionSelector::selectFence(MachineInstr &I) const {
 bool SPIRVInstructionSelector::selectOverflowArith(Register ResVReg,
                                                    SPIRVTypeInst ResType,
                                                    MachineInstr &I,
-                                                   unsigned Opcode) const {
+                                                   unsigned OrigIID) const {
   Type *ResTy = nullptr;
   StringRef ResName;
   if (!GR.findValueAttrs(&I, ResTy, ResName))
@@ -2564,52 +2576,181 @@ bool SPIRVInstructionSelector::selectOverflowArith(Register ResVReg,
   // "Result Type must be from OpTypeStruct. The struct must have two members,
   // and the two members must be the same type."
   Type *ResElemTy = cast<StructType>(ResTy)->getElementType(0);
-  ResTy = StructType::get(ResElemTy, ResElemTy);
-  // Build SPIR-V types and constant(s) if needed.
-  MachineIRBuilder MIRBuilder(I);
-  SPIRVTypeInst StructType = GR.getOrCreateSPIRVType(
-      ResTy, MIRBuilder, SPIRV::AccessQualifier::ReadWrite, false);
   assert(I.getNumDefs() > 1 && "Not enought operands");
+
+  // Emit the arithmetic directly into the two defs of this gMIR instruction:
+  // the scalar result and the i1 overflow flag.
+  Register LowVReg = I.getOperand(0).getReg();
+  Register OverflowVReg = I.getOperand(1).getReg();
+  return emitOverflowArith(I, OrigIID, /*FirstOp=*/I.getNumDefs(), ResElemTy,
+                           ResName, LowVReg, OverflowVReg);
+}
+
+bool SPIRVInstructionSelector::emitOverflowArith(
+    MachineInstr &I, unsigned OrigIID, unsigned FirstOp, Type *ResElemTy,
+    StringRef ResName, Register &LowVReg, Register &OverflowVReg) const {
+  // LowVReg/OverflowVReg may come in as valid registers the caller wants the
+  // arithmetic result and the i1 overflow flag written into directly (the
+  // multi-def lowering); otherwise fresh registers are allocated and returned.
+  Register DstLow = LowVReg;
+  Register DstOverflow = OverflowVReg;
+  MachineBasicBlock &BB = *I.getParent();
+  MachineIRBuilder MIRBuilder(I);
+  SPIRVTypeInst ScalarType = GR.getOrCreateSPIRVType(
+      ResElemTy, MIRBuilder, SPIRV::AccessQualifier::ReadWrite, false);
+  Register ScalarTypeReg = GR.getSPIRVTypeID(ScalarType);
   SPIRVTypeInst BoolType = GR.getOrCreateSPIRVBoolType(I, TII);
-  unsigned N = GR.getScalarOrVectorComponentCount(ResType);
+  unsigned N = GR.getScalarOrVectorComponentCount(ScalarType);
   if (N > 1)
     BoolType = GR.getOrCreateSPIRVVectorType(BoolType, N, I, TII);
   Register BoolTypeReg = GR.getSPIRVTypeID(BoolType);
-  Register ZeroReg = buildZerosVal(ResType, I);
-  // A new virtual register to store the result struct.
-  Register StructVReg = MRI->createGenericVirtualRegister(LLT::scalar(64));
-  MRI->setRegClass(StructVReg, &SPIRV::IDRegClass);
-  // Build the result name if needed.
-  if (ResName.size() > 0)
-    buildOpName(StructVReg, ResName, MIRBuilder);
-  // Build the arithmetic with overflow instruction.
-  MachineBasicBlock &BB = *I.getParent();
-  auto MIB =
-      BuildMI(BB, MIRBuilder.getInsertPt(), I.getDebugLoc(), TII.get(Opcode))
-          .addDef(StructVReg)
-          .addUse(GR.getSPIRVTypeID(StructType));
-  for (unsigned i = I.getNumDefs(); i < I.getNumOperands(); ++i)
-    MIB.addUse(I.getOperand(i).getReg());
-  MIB.constrainAllUses(TII, TRI, RBI);
-  // Build instructions to extract fields of the instruction's result.
-  // A new virtual register to store the higher part of the result struct.
-  Register HigherVReg = MRI->createGenericVirtualRegister(LLT::scalar(64));
-  MRI->setRegClass(HigherVReg, &SPIRV::iIDRegClass);
-  for (unsigned i = 0; i < I.getNumDefs(); ++i) {
-    auto MIB =
-        BuildMI(BB, I, I.getDebugLoc(), TII.get(SPIRV::OpCompositeExtract))
-            .addDef(i == 1 ? HigherVReg : I.getOperand(i).getReg())
-            .addUse(GR.getSPIRVTypeID(ResType))
-            .addUse(StructVReg)
-            .addImm(i);
+  Register ZeroReg = buildZerosVal(ScalarType, I);
+  bool IsVector = ScalarType->getOpcode() == SPIRV::OpTypeVector;
+
+  // Allocate a fresh scalar-id register unless Dst is already a valid register
+  // the caller wants the result written into.
+  auto orFreshReg = [&](Register Dst, LLT Ty,
+                        const TargetRegisterClass &RC = SPIRV::iIDRegClass) {
+    if (Dst.isValid())
+      return Dst;
+    Dst = MRI->createGenericVirtualRegister(Ty);
+    MRI->setRegClass(Dst, &RC);
+    return Dst;
+  };
+
+  // Build a SPIR-V op over Uses (optionally followed by immediate operands)
+  // producing a value of TypeReg in register Dst (a fresh scalar id if Dst is
+  // not given), and return that register.
+  auto buildOp = [&](unsigned Opc, Register TypeReg, ArrayRef<Register> Uses,
+                     ArrayRef<int64_t> Imms = {}, Register Dst = Register(),
+                     const TargetRegisterClass &RC = SPIRV::iIDRegClass) {
+    Dst = orFreshReg(Dst, LLT::scalar(64), RC);
+    auto MIB = BuildMI(BB, I, I.getDebugLoc(), TII.get(Opc))
+                   .addDef(Dst)
+                   .addUse(TypeReg);
+    for (Register Use : Uses)
+      MIB.addUse(Use);
+    for (int64_t Imm : Imms)
+      MIB.addImm(Imm);
     MIB.constrainAllUses(TII, TRI, RBI);
+    return Dst;
+  };
+  // Reduce a scalar to the i1 overflow flag via `Cmp Val, 0`, into Dst (a fresh
+  // register if Dst is not given).
+  auto buildOverflowFlag = [&](unsigned CmpOpc, Register Val, Register Dst) {
+    Dst = orFreshReg(Dst, LLT::scalar(1));
+    BuildMI(BB, I, I.getDebugLoc(), TII.get(CmpOpc))
+        .addDef(Dst)
+        .addUse(BoolTypeReg)
+        .addUse(Val)
+        .addUse(ZeroReg)
+        .constrainAllUses(TII, TRI, RBI);
+    return Dst;
+  };
+
+  switch (OrigIID) {
+  case Intrinsic::uadd_with_overflow:
+  case Intrinsic::usub_with_overflow:
+  case Intrinsic::umul_with_overflow:
+  case Intrinsic::smul_with_overflow: {
+    // These map to SPIR-V ops that produce a homogeneous {scalar, scalar}
+    // struct: the arithmetic result and the carry/borrow/high part. The high
+    // part is reduced to the i1 overflow flag with `!= 0`.
+    unsigned Opcode;
+    switch (OrigIID) {
+    case Intrinsic::uadd_with_overflow:
+      Opcode = IsVector ? SPIRV::OpIAddCarryV : SPIRV::OpIAddCarryS;
+      break;
+    case Intrinsic::usub_with_overflow:
+      Opcode = IsVector ? SPIRV::OpISubBorrowV : SPIRV::OpISubBorrowS;
+      break;
+    case Intrinsic::umul_with_overflow:
+      Opcode = SPIRV::OpUMulExtended;
+      break;
+    default:
+      Opcode = SPIRV::OpSMulExtended;
+      break;
+    }
+    SPIRVTypeInst HomogStructType = GR.getOrCreateSPIRVType(
+        StructType::get(ResElemTy, ResElemTy), MIRBuilder,
+        SPIRV::AccessQualifier::ReadWrite, false);
+    SmallVector<Register, 2> ArithOps;
+    for (unsigned i = FirstOp; i < I.getNumOperands(); ++i)
+      ArithOps.push_back(I.getOperand(i).getReg());
+    Register HomogVReg = buildOp(Opcode, GR.getSPIRVTypeID(HomogStructType),
+                                 ArithOps, {}, Register(), SPIRV::IDRegClass);
+    if (!ResName.empty())
+      buildOpName(HomogVReg, ResName, MIRBuilder);
+
+    // Extract the result (field 0) and the high part (field 1).
+    LowVReg = buildOp(SPIRV::OpCompositeExtract, ScalarTypeReg, {HomogVReg},
+                      {0}, DstLow);
+    Register HighVReg =
+        buildOp(SPIRV::OpCompositeExtract, ScalarTypeReg, {HomogVReg}, {1});
+    OverflowVReg = buildOverflowFlag(SPIRV::OpINotEqual, HighVReg, DstOverflow);
+    break;
   }
-  // Build boolean value from the higher part.
-  BuildMI(BB, I, I.getDebugLoc(), TII.get(SPIRV::OpINotEqual))
-      .addDef(I.getOperand(1).getReg())
-      .addUse(BoolTypeReg)
-      .addUse(HigherVReg)
-      .addUse(ZeroReg)
+  case Intrinsic::sadd_with_overflow:
+  case Intrinsic::ssub_with_overflow: {
+    // Signed add/sub have no direct SPIR-V "with carry" op. Compute the wrapped
+    // result and detect signed overflow from the sign bits of the operands and
+    // the result:
+    //   add: overflow = ((a ^ r) & (b ^ r)) < 0
+    //   sub: overflow = ((a ^ b) & (a ^ r)) < 0
+    Register Op0 = I.getOperand(FirstOp).getReg();
+    Register Op1 = I.getOperand(FirstOp + 1).getReg();
+    bool IsAdd = OrigIID == Intrinsic::sadd_with_overflow;
+    unsigned AddSubOpc = IsAdd ? (IsVector ? SPIRV::OpIAddV : SPIRV::OpIAddS)
+                               : (IsVector ? SPIRV::OpISubV : SPIRV::OpISubS);
+    unsigned XorOpc = IsVector ? SPIRV::OpBitwiseXorV : SPIRV::OpBitwiseXorS;
+    unsigned AndOpc = IsVector ? SPIRV::OpBitwiseAndV : SPIRV::OpBitwiseAndS;
+    LowVReg = buildOp(AddSubOpc, ScalarTypeReg, {Op0, Op1}, {}, DstLow);
+    Register Xor0 =
+        buildOp(XorOpc, ScalarTypeReg, {Op0, IsAdd ? LowVReg : Op1});
+    Register Xor1 =
+        buildOp(XorOpc, ScalarTypeReg, {IsAdd ? Op1 : Op0, LowVReg});
+    Register And = buildOp(AndOpc, ScalarTypeReg, {Xor0, Xor1});
+    OverflowVReg = buildOverflowFlag(SPIRV::OpSLessThan, And, DstOverflow);
+    break;
+  }
+  default:
+    return diagnoseUnsupported(
+        I, "Unexpected arithmetic-with-overflow intrinsic id");
+  }
+  return true;
+}
+
+// Select the spv_aggregate_with_overflow stand-in intrinsic, which represents
+// an arithmetic-with-overflow result that is used as a whole aggregate value
+// rather than being immediately destructured by extractvalue. Unlike
+// selectOverflowArith (which spreads the result over the multiple defs of the
+// gMIR intrinsic), this builds a single composite struct value-id matching the
+// {scalar, i1} result type, so the value can participate in PHIs and other
+// value-id uses.
+bool SPIRVInstructionSelector::selectAggregateWithOverflow(
+    Register ResVReg, SPIRVTypeInst ResType, MachineInstr &I) const {
+  // Operand layout: def, intrinsic-id, original LLVM intrinsic id (imm),
+  // arithmetic operands...
+  unsigned OrigIID = I.getOperand(2).getImm();
+  const Type *ResTy = GR.getTypeForSPIRVType(ResType);
+  if (!ResTy || !ResTy->isStructTy())
+    return diagnoseUnsupported(
+        I, "Expect struct type result for the arithmetic with "
+           "overflow intrinsic");
+  Type *ResElemTy = cast<StructType>(ResTy)->getElementType(0);
+
+  Register LowVReg, OverflowVReg;
+  if (!emitOverflowArith(I, OrigIID, /*FirstOp=*/3, ResElemTy, /*ResName=*/"",
+                         LowVReg, OverflowVReg))
+    return false;
+
+  // Assemble the {scalar, i1} composite that is the value of this intrinsic.
+  BuildMI(*I.getParent(), I, I.getDebugLoc(),
+          TII.get(SPIRV::OpCompositeConstruct))
+      .addDef(ResVReg)
+      .addUse(GR.getSPIRVTypeID(ResType))
+      .addUse(LowVReg)
+      .addUse(OverflowVReg)
       .constrainAllUses(TII, TRI, RBI);
   return true;
 }
@@ -4929,6 +5070,8 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
     return selectStore(I);
   case Intrinsic::spv_atomic_store:
     return selectAtomicStore(I);
+  case Intrinsic::spv_aggregate_with_overflow:
+    return selectAggregateWithOverflow(ResVReg, ResType, I);
   case Intrinsic::spv_extractv:
     return selectExtractVal(ResVReg, ResType, I);
   case Intrinsic::spv_insertv:
