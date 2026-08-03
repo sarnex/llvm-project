@@ -286,21 +286,11 @@ struct OMPInformationCache : public InformationCache {
                       bool OpenMPPostLink)
       : InformationCache(M, AG, Allocator, CGSCC), OMPBuilder(M),
         OpenMPPostLink(OpenMPPostLink) {
-
-    OMPBuilder.Config.IsTargetDevice = isOpenMPDevice(OMPBuilder.M);
     const Triple T(OMPBuilder.M.getTargetTriple());
-    switch (T.getArch()) {
-    case llvm::Triple::nvptx:
-    case llvm::Triple::nvptx64:
-    case llvm::Triple::amdgpu:
-      assert(OMPBuilder.Config.IsTargetDevice &&
-             "OpenMP AMDGPU/NVPTX is only prepared to deal with device code.");
-      OMPBuilder.Config.IsGPU = true;
-      break;
-    default:
-      OMPBuilder.Config.IsGPU = false;
-      break;
-    }
+    OMPBuilder.Config.IsTargetDevice = isOpenMPDevice(OMPBuilder.M);
+    OMPBuilder.Config.IsGPU = T.isGPU();
+    assert((!T.isGPU() || OMPBuilder.Config.IsTargetDevice) &&
+           "OpenMP for GPU targets is only prepared to deal with device code.");
     OMPBuilder.initialize();
     initializeRuntimeFunctions(M);
     initializeInternalControlVars();
